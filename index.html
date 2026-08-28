@@ -43,15 +43,15 @@
   .cal{background:#fff;border-radius:12px;box-shadow:0 1px 2px rgba(0,0,0,.05);overflow:hidden;}
   .cal .wd{display:grid;grid-template-columns:repeat(7,1fr);text-align:center;font-size:12px;color:var(--muted);border-bottom:1px solid var(--line);}
   .cal .wd div{padding:8px 0;}
-  .weekrow{display:grid;grid-template-columns:repeat(7,1fr);border-bottom:1px solid var(--line);}
+  .weekrow{display:grid;grid-template-columns:repeat(7,1fr);border-bottom:1px solid var(--line);align-items:stretch;}
   .weekrow:last-child{border-bottom:none;}
-  .daycell{min-height:88px;border-right:1px solid var(--line);padding:6px;text-align:left;background:none;border-top:none;border-bottom:none;border-left:none;cursor:pointer;display:flex;flex-direction:column;gap:4px;width:100%;font-family:inherit;}
+  .daycell{height:118px;border-right:1px solid var(--line);padding:6px;text-align:left;background:none;border-top:none;border-bottom:none;border-left:none;cursor:pointer;display:flex;flex-direction:column;gap:4px;width:100%;font-family:inherit;overflow-y:auto;}
   .daycell:last-child{border-right:none;}
   .daycell:hover{background:#FBFAF7;}
   .daycell.empty{background:#FAFAF8;cursor:default;}
-  .daynum{width:20px;height:20px;border-radius:999px;display:flex;align-items:center;justify-content:center;font-size:12px;color:#6B6759;}
+  .daynum{width:20px;height:20px;min-height:20px;flex-shrink:0;border-radius:999px;display:flex;align-items:center;justify-content:center;font-size:12px;color:#6B6759;}
   .daynum.today{background:var(--ink);color:#fff;}
-  .pill{font-size:10px;font-weight:600;border-radius:5px;padding:2px 4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .pill{font-size:10px;font-weight:600;line-height:1.3;border-radius:5px;padding:2px 4px;white-space:normal;word-break:break-word;overflow-wrap:anywhere;}
   .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;padding:16px;z-index:50;}
   .modal{background:#fff;border-radius:14px;box-shadow:0 8px 30px rgba(0,0,0,.2);width:100%;max-width:400px;padding:20px;max-height:85vh;overflow-y:auto;}
   .modal h2{font-size:17px;margin:0 0 12px;display:flex;justify-content:space-between;align-items:center;}
