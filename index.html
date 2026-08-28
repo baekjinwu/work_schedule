@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>輔大醫院門診 個人排班</title>
+<link rel="manifest" href="data:application/manifest+json,{%22name%22:%22%E8%BC%94%E5%A4%A7%E9%86%AB%E9%99%A2%E9%96%80%E8%A8%BA%E5%80%8B%E4%BA%BA%E6%8E%92%E7%8F%AD%22,%22display%22:%22standalone%22,%22start_url%22:%22.%22}" />
+<style>
+  :root{
+    --bg:#F6F5F2; --ink:#2B2A28; --muted:#8A8578; --muted2:#B0AB9C; --line:#EFEDE7; --line2:#D8D4C8;
+    --a:#C98A2E; --a-soft:#FBF0DD;
+    --b:#2F8F82; --b-soft:#DEF1EE;
+    --c:#4A5AA8; --c-soft:#E3E6F6;
+    --pt:#A8447A; --pt-soft:#F5E1EC;
+    --off:#8A8578; --off-soft:#EEECE6;
+    --red:#C0392B; --red-soft:#FBE3E1;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans TC",sans-serif;background:var(--bg);color:var(--ink);}
+  .wrap{max-width:760px;margin:0 auto;padding:16px;}
+  .header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px;}
+  .eyebrow{font-size:11px;letter-spacing:.2em;color:var(--muted);text-transform:uppercase;margin-bottom:4px;}
+  h1{font-size:26px;font-weight:600;margin:0;font-family:Georgia,"Noto Serif TC",serif;}
+  .navbtns{display:flex;gap:6px;align-items:center;}
+  .iconbtn{width:36px;height:36px;border-radius:999px;border:none;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.08);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;}
+  .pillbtn{border-radius:999px;border:none;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.08);cursor:pointer;padding:8px 14px;font-size:13px;}
+  .darkbtn{background:var(--ink);color:#fff;}
+  .summary{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:20px;}
+  @media(min-width:640px){.summary{grid-template-columns:repeat(7,1fr);}}
+  .card{background:#fff;border-radius:10px;padding:12px;box-shadow:0 1px 2px rgba(0,0,0,.05);}
+  .card .lbl{font-size:11px;color:var(--muted);margin-bottom:4px;}
+  .card .val{font-size:18px;font-weight:600;}
+  .card .sub{font-size:11px;color:var(--muted2);}
+  .card.total{grid-column:span 2;background:var(--ink);color:#fff;display:flex;flex-direction:column;gap:6px;justify-content:center;}
+  .card.total .lbl{color:#C9C5B8;}
+  .card.total .row{display:flex;gap:16px;align-items:baseline;}
+  .card.total .subline{font-size:10px;color:#C9C5B8;}
+  .card.total .amt{font-size:16px;font-weight:600;}
+  .card.total .foot{font-size:11px;color:#C9C5B8;border-top:1px solid rgba(255,255,255,.15);padding-top:6px;}
+  .exportrow{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center;}
+  .msg{font-size:12px;color:var(--b);}
+  .errbox{font-size:13px;color:var(--pt);background:var(--pt-soft);padding:8px 12px;border-radius:10px;margin-bottom:12px;}
+  .cal{background:#fff;border-radius:12px;box-shadow:0 1px 2px rgba(0,0,0,.05);overflow:hidden;}
+  .cal .wd{display:grid;grid-template-columns:repeat(7,1fr);text-align:center;font-size:12px;color:var(--muted);border-bottom:1px solid var(--line);}
+  .cal .wd div{padding:8px 0;}
+  .weekrow{display:grid;grid-template-columns:repeat(7,1fr);border-bottom:1px solid var(--line);}
+  .weekrow:last-child{border-bottom:none;}
+  .daycell{min-height:88px;border-right:1px solid var(--line);padding:6px;text-align:left;background:none;border-top:none;border-bottom:none;border-left:none;cursor:pointer;display:flex;flex-direction:column;gap:4px;width:100%;font-family:inherit;}
+  .daycell:last-child{border-right:none;}
+  .daycell:hover{background:#FBFAF7;}
+  .daycell.empty{background:#FAFAF8;cursor:default;}
+  .daynum{width:20px;height:20px;border-radius:999px;display:flex;align-items:center;justify-content:center;font-size:12px;color:#6B6759;}
+  .daynum.today{background:var(--ink);color:#fff;}
+  .pill{font-size:10px;font-weight:600;border-radius:5px;padding:2px 4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.3);display:flex;align-items:center;justify-content:center;padding:16px;z-index:50;}
+  .modal{background:#fff;border-radius:14px;box-shadow:0 8px 30px rgba(0,0,0,.2);width:100%;max-width:400px;padding:20px;max-height:85vh;overflow-y:auto;}
+  .modal h2{font-size:17px;margin:0 0 12px;display:flex;justify-content:space-between;align-items:center;}
+  .modal h2 button{background:none;border:none;font-size:18px;cursor:pointer;color:var(--muted2);}
+  .entryrow{display:flex;justify-content:space-between;align-items:flex-start;border-radius:10px;padding:10px 12px;margin-bottom:8px;}
+  .entryrow .code{font-size:14px;font-weight:600;}
+  .entryrow .sub{font-size:11px;color:var(--muted);margin-top:2px;}
+  .entryrow .doc{font-size:11px;font-weight:600;margin-top:2px;}
+  .entryrow .acts{display:flex;gap:2px;}
+  .entryrow .acts button{background:none;border:none;cursor:pointer;color:var(--muted2);padding:4px;font-size:15px;}
+  .typegrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;}
+  .typebtn{border:1px solid var(--line);border-radius:10px;padding:12px 4px;background:#fff;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:4px;}
+  .typebtn:hover{border-color:var(--line2);}
+  .typebtn .t{font-size:14px;font-weight:600;}
+  .typebtn .s{font-size:10px;color:var(--muted);}
+  .formbox{border:1px solid var(--line);border-radius:10px;padding:12px;}
+  .formbox label{font-size:12px;color:var(--muted);display:block;margin-bottom:4px;}
+  .formbox input{width:100%;border:1px solid var(--line);border-radius:8px;padding:7px 8px;font-size:13px;margin-bottom:10px;}
+  .formbox input:focus{outline:none;border-color:var(--muted2);}
+  .formactions{display:flex;gap:8px;}
+  .btn-primary{flex:1;border:none;border-radius:8px;background:var(--ink);color:#fff;padding:9px;font-size:13px;font-weight:500;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;}
+  .btn-primary:disabled{opacity:.4;cursor:default;}
+  .btn-secondary{border:1px solid var(--line);border-radius:8px;background:#fff;padding:9px 14px;font-size:13px;color:#6B6759;cursor:pointer;}
+  .settingsrow{display:flex;align-items:center;gap:8px;margin-bottom:10px;}
+  .settingsrow .lab{width:110px;font-size:13px;font-weight:500;}
+  .settingsrow input[type=time]{flex:1;border:1px solid var(--line);border-radius:8px;padding:5px 8px;font-size:13px;}
+  .note{font-size:11px;color:var(--muted2);margin-top:8px;}
+  .hidden{display:none;}
+  a.linklike{font-size:11px;color:inherit;text-decoration:underline;}
+</style>
+</head>
+<body>
+<div class="wrap" id="app"></div>
+
+<script>
+/* ---------- 常數設定 ---------- */
+const DEFAULT_TIMES = {
+  A: { start: "08:30", end: "12:30" },
+  B: { start: "13:00", end: "17:00" },
+  C: { start: "17:30", end: "21:30" },
+  PT: { start: "18:00", end: "21:00" },
+};
+const SHIFT_META = {
+  A: { label: "早診", color: "var(--a)", soft: "var(--a-soft)" },
+  B: { label: "午診", color: "var(--b)", soft: "var(--b-soft)" },
+  C: { label: "晚診", color: "var(--c)", soft: "var(--c-soft)" },
+  PT: { label: "兼職・好幸福泌尿科", color: "var(--pt)", soft: "var(--pt-soft)" },
+  OFF: { label: "休假", color: "var(--off)", soft: "var(--off-soft)" },
+};
+const WEEKDAYS = ["日","一","二","三","四","五","六"];
+const HOLIDAYS_2026 = {
+  "2026-01-01":"元旦","2026-02-15":"小年夜","2026-02-16":"除夕","2026-02-17":"春節",
+  "2026-02-18":"春節","2026-02-19":"春節","2026-02-20":"小年夜補假","2026-02-28":"和平紀念日",
+  "2026-04-04":"兒童節","2026-04-05":"清明節","2026-05-01":"勞動節","2026-06-19":"端午節",
+  "2026-09-25":"中秋節","2026-09-28":"教師節","2026-10-10":"國慶日","2026-10-25":"光復節","2026-12-25":"行憲紀念日",
+};
+
+// 內科組班表匯入預設（吳柏辰 B05548）
+const AUG_2026_IMPORT = {
+  "2026-08-01":[{type:"A",room:"21",code:"A21"}],
+  "2026-08-03":[{type:"A",room:"",code:"A外科"},{type:"B",room:"23",code:"B23"}],
+  "2026-08-04":[{type:"A",room:"18",code:"A18"},{type:"B",room:"18",code:"B18"}],
+  "2026-08-05":[{type:"A",room:"32",code:"A32"},{type:"B",room:"33",code:"B33"}],
+  "2026-08-06":[{type:"A",room:"06",code:"A06"},{type:"B",room:"19",code:"B*19"}],
+  "2026-08-07":[{type:"A",room:"18",code:"A*18"},{type:"B",room:"34",code:"B34"}],
+  "2026-08-10":[{type:"A",room:"03",code:"A03"},{type:"B",room:"401",code:"B401"}],
+  "2026-08-11":[{type:"A",room:"29",code:"A29"},{type:"B",room:"19",code:"B19"}],
+  "2026-08-12":[{type:"A",room:"32",code:"A32"},{type:"B",room:"",code:"B*"}],
+  "2026-08-13":[{type:"A",room:"18",code:"A18"},{type:"B",room:"",code:"B延"}],
+  "2026-08-14":[{type:"A",room:"49",code:"A49"},{type:"B",room:"18",code:"B*18"}],
+  "2026-08-15":[{type:"A",room:"06",code:"A06"}],
+  "2026-08-17":[{type:"A",room:"03",code:"A03"},{type:"B",room:"08",code:"B08"}],
+  "2026-08-18":[{type:"A",room:"205A",code:"A205A"},{type:"B",room:"24",code:"B24"}],
+  "2026-08-19":[{type:"A",room:"18",code:"A18"},{type:"B",room:"18",code:"B18"}],
+  "2026-08-20":[{type:"A",room:"55",code:"A55"},{type:"B",room:"306",code:"B*306"}],
+  "2026-08-21":[{type:"A",room:"31",code:"A31"},{type:"B",room:"",code:"B延"}],
+  "2026-08-24":[{type:"A",room:"07",code:"A07"},{type:"B",room:"03",code:"B03"}],
+  "2026-08-25":[{type:"A",room:"30",code:"A30"},{type:"B",room:"",code:"B延"}],
+  "2026-08-26":[{type:"A",room:"54",code:"A54"},{type:"B",room:"50",code:"B50"}],
+  "2026-08-27":[{type:"A",room:"50",code:"A50"}],
+  "2026-08-28":[{type:"A",room:"24",code:"A24"},{type:"B",room:"35",code:"B35"}],
+  "2026-08-29":[{type:"A",room:"66",code:"A66"}],
+  "2026-08-31":[{type:"A",room:"52",code:"A52"},{type:"B",room:"04",code:"B04"}],
+};
+const SEPT_2026_IMPORT = {
+  "2026-09-01":[{type:"A",room:"14",code:"A14"},{type:"B",room:"19",code:"B*19"}],
+  "2026-09-02":[{type:"B",room:"18",code:"B*18"},{type:"C",room:"55",code:"C55"}],
+  "2026-09-03":[{type:"A",room:"19",code:"A19"},{type:"B",room:"19",code:"B19"}],
+  "2026-09-04":[{type:"A",room:"18",code:"A*18"},{type:"B",room:"1302",code:"B1302"}],
+  "2026-09-07":[{type:"A",room:"03",code:"A03"},{type:"B",room:"401",code:"B401"}],
+  "2026-09-08":[{type:"A",room:"14",code:"A14"},{type:"B",room:"",code:"B*"}],
+  "2026-09-09":[{type:"A",room:"50",code:"A50"},{type:"B",room:"31",code:"B31"}],
+  "2026-09-10":[{type:"A",room:"18",code:"A18節律器"},{type:"B",room:"31",code:"B31"}],
+  "2026-09-11":[{type:"A",room:"05",code:"A05"},{type:"B",room:"",code:"B延"}],
+  "2026-09-12":[{type:"A",room:"20",code:"A20"}],
+  "2026-09-14":[{type:"A",room:"07",code:"A07"},{type:"B",room:"04",code:"B04"}],
+  "2026-09-15":[{type:"A",room:"54",code:"A54"},{type:"B",room:"55",code:"B55"}],
+  "2026-09-16":[{type:"A",room:"306",code:"A306"},{type:"B",room:"",code:"B*"}],
+  "2026-09-17":[{type:"A",room:"19",code:"A19"},{type:"B",room:"19",code:"B19"}],
+  "2026-09-18":[{type:"A",room:"54",code:"A54"},{type:"B",room:"18",code:"B*18"}],
+  "2026-09-21":[{type:"A",room:"55",code:"A55"},{type:"B",room:"25",code:"B25"}],
+  "2026-09-22":[{type:"A",room:"50",code:"A50"},{type:"B",room:"18",code:"B*18"}],
+  "2026-09-23":[{type:"A",room:"18",code:"A18"},{type:"B",room:"18",code:"B18"}],
+  "2026-09-24":[{type:"A",room:"49",code:"A49"},{type:"B",room:"306",code:"B*306"}],
+  "2026-09-26":[{type:"A",room:"54",code:"A54"}],
+  "2026-09-29":[{type:"A",room:"05",code:"A05"},{type:"B",room:"29",code:"B29"}],
+  "2026-09-30":[{type:"A",room:"306",code:"A306"},{type:"B",room:"29",code:"B29"}],
+};
+
+/* ---------- 小工具 ---------- */
+function pad2(n){return String(n).padStart(2,"0");}
+function monthKeyOf(y,m){return `${y}-${pad2(m+1)}`;}
+function dateKeyOf(y,m,d){return `${monthKeyOf(y,m)}-${pad2(d)}`;}
+function processRoom(raw){const r=(raw||"").trim();if(r.length===3&&r[0]==="2")return r.slice(1);return r;}
+function timeToMinutes(t){const [h,m]=t.split(":").map(Number);return h*60+m;}
+function durationHours(times,type){const c=times[type];if(!c)return 0;return (timeToMinutes(c.end)-timeToMinutes(c.start))/60;}
+function formatHours(h){return Number.isInteger(h)?String(h):h.toFixed(1);}
+function getMonthWeeks(y,m){
+  const first=new Date(y,m,1).getDay();
+  const days=new Date(y,m+1,0).getDate();
+  const cells=[];
+  for(let i=0;i<first;i++)cells.push(null);
+  for(let d=1;d<=days;d++)cells.push(d);
+  while(cells.length%7!==0)cells.push(null);
+  const weeks=[];
+  for(let i=0;i<cells.length;i+=7)weeks.push(cells.slice(i,i+7));
+  return weeks;
+}
+const todayStr=(()=>{const t=new Date();return dateKeyOf(t.getFullYear(),t.getMonth(),t.getDate());})();
+
+/* ---------- localStorage 存取 ---------- */
+function lsGet(key){try{const v=localStorage.getItem(key);return v?JSON.parse(v):null;}catch(e){return null;}}
+function lsSet(key,val){try{localStorage.setItem(key,JSON.stringify(val));return true;}catch(e){return false;}}
+const LS_PREFIX = "fju-schedule:";
+
+/* ---------- 全域狀態 ---------- */
+const now = new Date();
+let state = {
+  year: now.getFullYear(),
+  monthIndex: now.getMonth(),
+  scheduleData: {},
+  shiftTimes: DEFAULT_TIMES,
+  selectedDay: null,
+  addingType: null,
+  editingIndex: null,
+  roomInput: "",
+  codeInput: "",
+  doctorInput: "",
+  showSettings: false,
+  draftTimes: DEFAULT_TIMES,
+  importTarget: null,
+  copyMsg: "",
+  error: "",
+};
+
+function loadShiftTimes(){
+  const saved = lsGet(LS_PREFIX + "settings:shiftTimes");
+  state.shiftTimes = saved ? Object.assign({}, DEFAULT_TIMES, saved) : DEFAULT_TIMES;
+}
+function loadMonth(){
+  const key = monthKeyOf(state.year, state.monthIndex);
+  const saved = lsGet(LS_PREFIX + "schedule:" + key);
+  state.scheduleData = saved || {};
+}
+function persistMonth(updated){
+  state.scheduleData = updated;
+  const key = monthKeyOf(state.year, state.monthIndex);
+  const ok = lsSet(LS_PREFIX + "schedule:" + key, updated);
+  state.error = ok ? "" : "儲存失敗，請再試一次（可能是瀏覽器儲存空間已滿或為無痕模式）";
+  render();
+}
+
+/* ---------- 計算 ---------- */
+function computeTotals(){
+  const t = {A:{count:0,hours:0},B:{count:0,hours:0},C:{count:0,hours:0},PT:{count:0,hours:0}};
+  Object.values(state.scheduleData).forEach(list=>{
+    (list||[]).forEach(e=>{
+      if(!t[e.type])return;
+      t[e.type].count++;
+      t[e.type].hours += durationHours(state.shiftTimes, e.type);
+    });
+  });
+  const totalHours = Object.values(t).reduce((s,x)=>s+x.hours,0);
+  return Object.assign({},t,{totalHours});
+}
+function computeOffDays(){
+  const days = new Date(state.year, state.monthIndex+1, 0).getDate();
+  let n=0;
+  for(let d=1; d<=days; d++){
+    const key = dateKeyOf(state.year, state.monthIndex, d);
+    const entries = state.scheduleData[key] || [];
+    const hasWork = entries.some(e=>["A","B","C","PT"].includes(e.type));
+    if(!hasWork)n++;
+  }
+  return n;
+}
+
+/* ---------- 匯出 ---------- */
+function buildMonthRows(){
+  const count = new Date(state.year, state.monthIndex+1, 0).getDate();
+  const rows = [];
+  for(let d=1; d<=count; d++){
+    const key = dateKeyOf(state.year, state.monthIndex, d);
+    const entries = state.scheduleData[key] || [];
+    const holiday = HOLIDAYS_2026[key];
+    const work = entries.filter(e=>["A","B","C","PT"].includes(e.type));
+    let codes = work.map(e=> e.doctor ? `${e.code}(${e.doctor})` : e.code).join("+");
+    if(!codes) codes = holiday ? `休診・${holiday}` : "OFF";
+    const hours = work.reduce((s,e)=>s+durationHours(state.shiftTimes,e.type),0);
+    const wd = WEEKDAYS[new Date(state.year, state.monthIndex, d).getDay()];
+    rows.push({date:`${state.year}/${pad2(state.monthIndex+1)}/${pad2(d)}`, weekday:wd, codes, hours});
+  }
+  return rows;
+}
+function handleCopyText(){
+  const rows = buildMonthRows();
+  const totals = computeTotals();
+  let text = `輔大醫院門診 個人排班 - ${state.year}年${state.monthIndex+1}月\n\n`;
+  rows.forEach(r=>{ text += `${r.date}(${r.weekday})  ${r.codes}${r.hours? "  "+formatHours(r.hours)+"hr":""}\n`; });
+  text += `\n本月總工時：${formatHours(totals.totalHours)} 小時\n`;
+  text += `早診A ${totals.A.count}診 ${formatHours(totals.A.hours)}hr／午診B ${totals.B.count}診 ${formatHours(totals.B.hours)}hr／晚診C ${totals.C.count}診 ${formatHours(totals.C.hours)}hr／兼職PT ${totals.PT.count}次 ${formatHours(totals.PT.hours)}hr`;
+  navigator.clipboard.writeText(text).then(()=>{
+    state.copyMsg = "已複製本月班表文字"; render();
+    setTimeout(()=>{state.copyMsg="";render();},2500);
+  }).catch(()=>{
+    state.copyMsg = "複製失敗，請改用下載 CSV"; render();
+    setTimeout(()=>{state.copyMsg="";render();},2500);
+  });
+}
+function handleDownloadCSV(){
+  const rows = buildMonthRows();
+  const totals = computeTotals();
+  let csv = "日期,星期,班別代碼,當日工時(hr)\n";
+  rows.forEach(r=>{ csv += `${r.date},${r.weekday},${r.codes},${r.hours?formatHours(r.hours):""}\n`; });
+  csv += `\n總計,,,${formatHours(totals.totalHours)}\n`;
+  csv += `早診A,${totals.A.count}診,,${formatHours(totals.A.hours)}\n`;
+  csv += `午診B,${totals.B.count}診,,${formatHours(totals.B.hours)}\n`;
+  csv += `晚診C,${totals.C.count}診,,${formatHours(totals.C.hours)}\n`;
+  csv += `兼職PT,${totals.PT.count}次,,${formatHours(totals.PT.hours)}\n`;
+  downloadBlob(new Blob(["\uFEFF"+csv],{type:"text/csv;charset=utf-8;"}), `排班表_${monthKeyOf(state.year,state.monthIndex)}.csv`);
+}
+function downloadBlob(blob, filename){
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+function handleExportBackup(){
+  const backup = {};
+  for(let i=0;i<localStorage.length;i++){
+    const k = localStorage.key(i);
+    if(k && k.indexOf(LS_PREFIX)===0){
+      backup[k.slice(LS_PREFIX.length)] = JSON.parse(localStorage.getItem(k));
+    }
+  }
+  downloadBlob(new Blob([JSON.stringify(backup,null,2)],{type:"application/json"}), `輔大排班備份_${new Date().toISOString().slice(0,10)}.json`);
+}
+function handleImportBackupFile(file){
+  const reader = new FileReader();
+  reader.onload = (ev)=>{
+    try{
+      const data = JSON.parse(ev.target.result);
+      Object.entries(data).forEach(([k,v])=>{ lsSet(LS_PREFIX+k, v); });
+      loadShiftTimes(); loadMonth();
+      state.copyMsg = "備份已匯入";
+      render();
+      setTimeout(()=>{state.copyMsg="";render();},2500);
+    }catch(e){
+      state.error = "備份檔案格式錯誤，匯入失敗";
+      render();
+    }
+  };
+  reader.readAsText(file);
+}
+
+/* ---------- 匯入內科組班表 ---------- */
+function performImport(targetMonthKey, dataset){
+  let base = {};
+  const curKey = monthKeyOf(state.year, state.monthIndex);
+  if(curKey === targetMonthKey){ base = Object.assign({}, state.scheduleData); }
+  else { base = lsGet(LS_PREFIX+"schedule:"+targetMonthKey) || {}; }
+  const merged = Object.assign({}, base);
+  Object.entries(dataset).forEach(([date,entries])=>{
+    const existing = merged[date] || [];
+    const keep = existing.filter(e=>e.type==="PT"||e.type==="OFF");
+    merged[date] = entries.concat(keep);
+  });
+  lsSet(LS_PREFIX+"schedule:"+targetMonthKey, merged);
+  const [ty,tm] = targetMonthKey.split("-").map(Number);
+  state.year = ty; state.monthIndex = tm-1;
+  loadMonth();
+  state.copyMsg = `已匯入 ${tm} 月內科組班表`;
+  render();
+  setTimeout(()=>{state.copyMsg="";render();},2500);
+}
+
+/* ---------- 事件處理 ---------- */
+function goMonth(delta){
+  let m = state.monthIndex + delta, y = state.year;
+  if(m<0){m=11;y--;} else if(m>11){m=0;y++;}
+  state.year=y; state.monthIndex=m;
+  closeDayModal(false);
+  loadMonth();
+  render();
+}
+function goToday(){
+  state.year = now.getFullYear(); state.monthIndex = now.getMonth();
+  loadMonth(); render();
+}
+function openDay(day){
+  if(!day)return;
+  state.selectedDay = day;
+  state.addingType = null; state.editingIndex=null;
+  state.roomInput=""; state.codeInput=""; state.doctorInput="";
+  render();
+}
+function closeDayModal(doRender=true){
+  state.selectedDay=null; state.addingType=null; state.editingIndex=null;
+  state.roomInput=""; state.codeInput=""; state.doctorInput="";
+  if(doRender)render();
+}
+function startAdd(type){
+  state.addingType=type; state.editingIndex=null;
+  state.roomInput=""; state.codeInput= type==="PT" ? "PT" : type; state.doctorInput="";
+  render();
+}
+function startEdit(idx, entry){
+  state.addingType = entry.type; state.editingIndex = idx;
+  state.roomInput = entry.room || ""; state.codeInput = entry.code || entry.type; state.doctorInput = entry.doctor || "";
+  render();
+}
+function onRoomInput(v){
+  state.roomInput = v;
+  if(state.addingType && state.addingType!=="PT" && state.addingType!=="OFF"){
+    state.codeInput = state.addingType + processRoom(v);
+  }
+  render();
+}
+function confirmAdd(){
+  if(!state.selectedDay || !state.addingType) return;
+  if(state.addingType!=="PT" && state.addingType!=="OFF" && !state.roomInput.trim()) return;
+  const dateStr = dateKeyOf(state.year, state.monthIndex, state.selectedDay);
+  const entry = {
+    type: state.addingType,
+    room: (state.addingType==="PT"||state.addingType==="OFF") ? "" : state.roomInput.trim(),
+    code: state.codeInput.trim() || state.addingType,
+    doctor: state.doctorInput.trim(),
+  };
+  const updated = Object.assign({}, state.scheduleData);
+  const list = updated[dateStr] ? updated[dateStr].slice() : [];
+  if(state.editingIndex!==null && list[state.editingIndex]) list[state.editingIndex] = entry;
+  else list.push(entry);
+  updated[dateStr] = list;
+  persistMonth(updated);
+  state.addingType=null; state.editingIndex=null; state.roomInput=""; state.codeInput=""; state.doctorInput="";
+  render();
+}
+function deleteEntry(dateStr, idx){
+  const updated = Object.assign({}, state.scheduleData);
+  const list = (updated[dateStr]||[]).slice();
+  list.splice(idx,1);
+  if(list.length===0) delete updated[dateStr]; else updated[dateStr]=list;
+  persistMonth(updated);
+}
+function openSettings(){ state.draftTimes = JSON.parse(JSON.stringify(state.shiftTimes)); state.showSettings=true; render(); }
+function closeSettings(){ state.showSettings=false; render(); }
+function saveSettings(){
+  state.shiftTimes = state.draftTimes;
+  lsSet(LS_PREFIX+"settings:shiftTimes", state.shiftTimes);
+  state.showSettings=false; render();
+}
+function setDraftTime(type, field, val){ state.draftTimes[type][field]=val; render(); }
+
+/* ---------- Render ---------- */
+function esc(s){ return (s===undefined||s===null) ? "" : String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/"/g,"&quot;"); }
+
+function render(){
+  const totals = computeTotals();
+  const offDays = computeOffDays();
+  const weeks = getMonthWeeks(state.year, state.monthIndex);
+
+  let html = "";
+  html += `<div class="header">
+    <div>
+      <div class="eyebrow">輔大醫院門診 個人排班</div>
+      <h1>${state.year} 年 ${state.monthIndex+1} 月</h1>
+    </div>
+    <div class="navbtns">
+      <button class="iconbtn" onclick="goMonth(-1)">‹</button>
+      <button class="pillbtn" onclick="goToday()">本月</button>
+      <button class="iconbtn" onclick="goMonth(1)">›</button>
+      <button class="iconbtn" onclick="openSettings()">⚙</button>
+    </div>
+  </div>`;
+
+  html += `<div class="summary">`;
+  ["A","B","C","PT"].forEach(type=>{
+    const m = SHIFT_META[type];
+    html += `<div class="card" style="border-top:3px solid ${m.color}">
+      <div class="lbl">${m.label}</div>
+      <div class="val" style="color:${m.color}">${formatHours(totals[type].hours)}<span style="font-size:11px;font-weight:400;margin-left:4px;">hr</span></div>
+      <div class="sub">${totals[type].count} 診</div>
+    </div>`;
+  });
+  html += `<div class="card" style="border-top:3px solid var(--red)">
+    <div class="lbl">本月 OFF</div>
+    <div class="val" style="color:var(--red)">${offDays}<span style="font-size:11px;font-weight:400;margin-left:4px;">天</span></div>
+    <div class="sub">含週日／假日</div>
+  </div>`;
+  const ftHours = totals.A.hours + totals.B.hours + totals.C.hours;
+  html += `<div class="card total">
+    <div class="lbl">🕐 本月總工時</div>
+    <div class="row">
+      <div><div class="subline">正職（A+B+C）</div><div class="amt">${formatHours(ftHours)}<span style="font-size:10px;font-weight:400;">hr</span></div></div>
+      <div><div class="subline">兼職（PT）</div><div class="amt">${formatHours(totals.PT.hours)}<span style="font-size:10px;font-weight:400;">hr</span></div></div>
+    </div>
+    <div class="foot">= 共 ${formatHours(totals.totalHours)} 小時</div>
+  </div>`;
+  html += `</div>`;
+
+  html += `<div class="exportrow">
+    <button class="pillbtn darkbtn" onclick="state.importTarget='aug';render();">⭱ 匯入 8 月班表</button>
+    <button class="pillbtn darkbtn" onclick="state.importTarget='sep';render();">⭱ 匯入 9 月班表</button>
+    <button class="pillbtn" onclick="handleCopyText()">⧉ 複製本月班表文字</button>
+    <button class="pillbtn" onclick="handleDownloadCSV()">⭳ 下載本月 CSV</button>
+    ${state.copyMsg?`<span class="msg">${esc(state.copyMsg)}</span>`:""}
+  </div>`;
+
+  html += `<div class="exportrow">
+    <button class="pillbtn" onclick="handleExportBackup()">⭳ 匯出完整備份 (JSON)</button>
+    <button class="pillbtn" onclick="document.getElementById('backupFileInput').click()">⭱ 匯入備份 (JSON)</button>
+    <input type="file" id="backupFileInput" accept="application/json" class="hidden" onchange="if(this.files[0])handleImportBackupFile(this.files[0]);this.value='';">
+  </div>`;
+
+  if(state.error){ html += `<div class="errbox">${esc(state.error)}</div>`; }
+
+  html += `<div class="cal"><div class="wd">${WEEKDAYS.map(w=>`<div>${w}</div>`).join("")}</div>`;
+  weeks.forEach(week=>{
+    html += `<div class="weekrow">`;
+    week.forEach(day=>{
+      if(!day){ html += `<div class="daycell empty"></div>`; return; }
+      const dateStr = dateKeyOf(state.year, state.monthIndex, day);
+      const entries = state.scheduleData[dateStr] || [];
+      const isToday = dateStr===todayStr;
+      const isSunday = new Date(state.year, state.monthIndex, day).getDay()===0;
+      const holiday = HOLIDAYS_2026[dateStr];
+      const work = entries.filter(e=>["A","B","C","PT"].includes(e.type));
+      let inner = "";
+      if(holiday){
+        inner = `<span class="pill" style="background:var(--red-soft);color:var(--red)">休診・${esc(holiday)}</span>`;
+      } else if(work.length===0){
+        const style = isSunday ? "background:var(--red-soft);color:var(--red)" : "background:var(--off-soft);color:var(--off)";
+        inner = `<span class="pill" style="${style}">OFF</span>`;
+      } else {
+        inner = work.map(e=>{
+          const m = SHIFT_META[e.type];
+          const title = e.doctor ? ` title="當診醫師：${esc(e.doctor)}"` : "";
+          return `<span class="pill" style="background:${m.soft};color:${m.color}"${title}>${esc(e.code)}</span>`;
+        }).join("");
+      }
+      html += `<button class="daycell" onclick="openDay(${day})">
+        <span class="daynum ${isToday?"today":""}">${day}</span>
+        <div style="display:flex;flex-direction:column;gap:2px;">${inner}</div>
+      </button>`;
+    });
+    html += `</div>`;
+  });
+  html += `</div>`;
+
+  /* 日期編輯 modal */
+  if(state.selectedDay){
+    const dateStr = dateKeyOf(state.year, state.monthIndex, state.selectedDay);
+    const entries = state.scheduleData[dateStr] || [];
+    html += `<div class="modal-bg" onclick="closeDayModal()"><div class="modal" onclick="event.stopPropagation()">
+      <h2>${state.year}/${pad2(state.monthIndex+1)}/${pad2(state.selectedDay)}<button onclick="closeDayModal()">✕</button></h2>`;
+    if(entries.length>0){
+      entries.forEach((e,idx)=>{
+        const m = SHIFT_META[e.type];
+        const timeTxt = state.shiftTimes[e.type] ? ` ・ ${state.shiftTimes[e.type].start}–${state.shiftTimes[e.type].end}` : "";
+        html += `<div class="entryrow" style="background:${m.soft}">
+          <div>
+            <div class="code" style="color:${m.color}">${esc(e.code)}</div>
+            <div class="sub">${m.label}${timeTxt}</div>
+            ${e.doctor?`<div class="doc" style="color:${m.color}">當診醫師：${esc(e.doctor)}</div>`:""}
+          </div>
+          <div class="acts">
+            <button onclick='startEdit(${idx}, ${JSON.stringify(e).replace(/'/g,"&apos;")})'>✎</button>
+            <button onclick="deleteEntry('${dateStr}',${idx})">🗑</button>
+          </div>
+        </div>`;
+      });
+    }
+    if(state.addingType===null){
+      html += `<div class="typegrid">`;
+      ["A","B","C","PT","OFF"].forEach(type=>{
+        const m = SHIFT_META[type];
+        const sub = state.shiftTimes[type] ? state.shiftTimes[type].start : "全天";
+        html += `<button class="typebtn" onclick="startAdd('${type}')"><span class="t" style="color:${m.color}">${type}</span><span class="s">${sub}</span></button>`;
+      });
+      html += `</div>`;
+    } else {
+      const type = state.addingType;
+      const m = SHIFT_META[type];
+      const timeTxt = state.shiftTimes[type] ? `（${state.shiftTimes[type].start}–${state.shiftTimes[type].end}）` : "";
+      html += `<div class="formbox">
+        <div style="font-size:13px;font-weight:600;margin-bottom:8px;color:${m.color}">${state.editingIndex!==null?"編輯":"新增"} ${m.label}${timeTxt}</div>`;
+      if(type!=="PT" && type!=="OFF"){
+        html += `<label>診間號（例如 232）</label>
+          <input value="${esc(state.roomInput)}" oninput="onRoomInput(this.value)" placeholder="輸入診間號">`;
+      }
+      html += `<label>顯示代碼（可手動修改）</label>
+        <input value="${esc(state.codeInput)}" oninput="state.codeInput=this.value">`;
+      if(type!=="OFF"){
+        html += `<label>當診醫師（選填，可對照門診表填入）</label>
+          <input value="${esc(state.doctorInput)}" oninput="state.doctorInput=this.value" placeholder="例如：林柏辰">`;
+      }
+      const disabled = (type!=="PT" && type!=="OFF" && !state.roomInput.trim()) ? "disabled" : "";
+      html += `<div class="formactions">
+        <button class="btn-primary" ${disabled} onclick="confirmAdd()">＋ ${state.editingIndex!==null?"更新":"儲存"}</button>
+        <button class="btn-secondary" onclick="state.addingType=null;state.editingIndex=null;render();">取消</button>
+      </div></div>`;
+    }
+    html += `</div></div>`;
+  }
+
+  /* 匯入確認 modal */
+  if(state.importTarget){
+    const label = state.importTarget==="aug" ? "8" : "9";
+    html += `<div class="modal-bg" onclick="state.importTarget=null;render();"><div class="modal" onclick="event.stopPropagation()">
+      <h2>匯入 ${label} 月班表</h2>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:16px;">這會匯入 ${label} 月內科組班表（吳柏辰），並覆蓋 ${label} 月已存在的門診班別（A/B/C）。兼職（PT）與 OFF 紀錄不受影響。確定要匯入嗎？</p>
+      <div class="formactions">
+        <button class="btn-primary" onclick="performImport('${state.importTarget==="aug"?"2026-08":"2026-09"}', ${state.importTarget==="aug"?"AUG_2026_IMPORT":"SEPT_2026_IMPORT"});state.importTarget=null;">⭱ 確定匯入</button>
+        <button class="btn-secondary" onclick="state.importTarget=null;render();">取消</button>
+      </div>
+    </div></div>`;
+  }
+
+  /* 設定 modal */
+  if(state.showSettings){
+    html += `<div class="modal-bg" onclick="closeSettings()"><div class="modal" onclick="event.stopPropagation()">
+      <h2>班別時間設定<button onclick="closeSettings()">✕</button></h2>`;
+    ["A","B","C","PT"].forEach(type=>{
+      const m = SHIFT_META[type];
+      html += `<div class="settingsrow">
+        <div class="lab" style="color:${m.color}">${type} ・ ${m.label}</div>
+        <input type="time" value="${state.draftTimes[type].start}" onchange="setDraftTime('${type}','start',this.value)">
+        <span>–</span>
+        <input type="time" value="${state.draftTimes[type].end}" onchange="setDraftTime('${type}','end',this.value)">
+      </div>`;
+    });
+    html += `<p class="note">好幸福泌尿科兼職時段目前為暫定，之後確定後可在此調整，工時會自動重新計算。</p>
+      <button class="btn-primary" style="margin-top:12px;width:100%;" onclick="saveSettings()">儲存設定</button>
+    </div></div>`;
+  }
+
+  document.getElementById("app").innerHTML = html;
+}
+
+/* ---------- 初始化 ---------- */
+loadShiftTimes();
+loadMonth();
+render();
+</script>
+</body>
+</html>
