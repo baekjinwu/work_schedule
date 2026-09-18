@@ -203,6 +203,8 @@ let state = {
   showSettings: false,
   draftTimes: DEFAULT_TIMES,
   importTarget: null,
+  showImportPicker: false,
+  importMonthChoice: "aug",
   copyMsg: "",
   error: "",
 };
@@ -388,8 +390,14 @@ function onRoomInput(v){
   state.roomInput = v;
   if(state.addingType && state.addingType!=="PT" && state.addingType!=="OFF"){
     state.codeInput = state.addingType + processRoom(v);
+    const codeEl = document.getElementById("codeInputEl");
+    if(codeEl) codeEl.value = state.codeInput;
   }
-  render();
+  const saveBtn = document.getElementById("saveEntryBtn");
+  if(saveBtn){
+    const disabled = (state.addingType!=="PT" && state.addingType!=="OFF" && !v.trim());
+    saveBtn.disabled = disabled;
+  }
 }
 function confirmAdd(){
   if(!state.selectedDay || !state.addingType) return;
@@ -474,8 +482,7 @@ function render(){
   html += `</div>`;
 
   html += `<div class="exportrow">
-    <button class="pillbtn darkbtn" onclick="state.importTarget='aug';render();">⭱ 匯入 8 月班表</button>
-    <button class="pillbtn darkbtn" onclick="state.importTarget='sep';render();">⭱ 匯入 9 月班表</button>
+    <button class="pillbtn darkbtn" onclick="state.showImportPicker=true;render();">⭱ 匯入班表</button>
     <button class="pillbtn" onclick="handleCopyText()">⧉ 複製本月班表文字</button>
     <button class="pillbtn" onclick="handleDownloadCSV()">⭳ 下載本月 CSV</button>
     ${state.copyMsg?`<span class="msg">${esc(state.copyMsg)}</span>`:""}
@@ -564,29 +571,35 @@ function render(){
           <input value="${esc(state.roomInput)}" oninput="onRoomInput(this.value)" placeholder="輸入診間號">`;
       }
       html += `<label>顯示代碼（可手動修改）</label>
-        <input value="${esc(state.codeInput)}" oninput="state.codeInput=this.value">`;
+        <input id="codeInputEl" value="${esc(state.codeInput)}" oninput="state.codeInput=this.value">`;
       if(type!=="OFF"){
         html += `<label>當診醫師（選填，可對照門診表填入）</label>
           <input value="${esc(state.doctorInput)}" oninput="state.doctorInput=this.value" placeholder="例如：林柏辰">`;
       }
       const disabled = (type!=="PT" && type!=="OFF" && !state.roomInput.trim()) ? "disabled" : "";
       html += `<div class="formactions">
-        <button class="btn-primary" ${disabled} onclick="confirmAdd()">＋ ${state.editingIndex!==null?"更新":"儲存"}</button>
+        <button id="saveEntryBtn" class="btn-primary" ${disabled} onclick="confirmAdd()">＋ ${state.editingIndex!==null?"更新":"儲存"}</button>
         <button class="btn-secondary" onclick="state.addingType=null;state.editingIndex=null;render();">取消</button>
       </div></div>`;
     }
     html += `</div></div>`;
   }
 
-  /* 匯入確認 modal */
-  if(state.importTarget){
-    const label = state.importTarget==="aug" ? "8" : "9";
-    html += `<div class="modal-bg" onclick="state.importTarget=null;render();"><div class="modal" onclick="event.stopPropagation()">
-      <h2>匯入 ${label} 月班表</h2>
+  /* 匯入班表 modal：先選月份，再確認 */
+  if(state.showImportPicker){
+    const sel = state.importMonthChoice || "aug";
+    const label = sel==="aug" ? "8" : "9";
+    html += `<div class="modal-bg" onclick="state.showImportPicker=false;render();"><div class="modal" onclick="event.stopPropagation()">
+      <h2>匯入班表<button onclick="state.showImportPicker=false;render();">✕</button></h2>
+      <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:6px;">選擇要匯入的月份</label>
+      <div class="typegrid" style="grid-template-columns:repeat(2,1fr);margin-bottom:16px;">
+        <button class="typebtn" style="${sel==='aug'?'border-color:var(--ink);':''}" onclick="state.importMonthChoice='aug';render();"><span class="t">8 月</span><span class="s">內科組班表</span></button>
+        <button class="typebtn" style="${sel==='sep'?'border-color:var(--ink);':''}" onclick="state.importMonthChoice='sep';render();"><span class="t">9 月</span><span class="s">內科組班表</span></button>
+      </div>
       <p style="font-size:13px;color:var(--muted);margin-bottom:16px;">這會匯入 ${label} 月內科組班表（吳柏辰），並覆蓋 ${label} 月已存在的門診班別（A/B/C）。兼職（PT）與 OFF 紀錄不受影響。確定要匯入嗎？</p>
       <div class="formactions">
-        <button class="btn-primary" onclick="performImport('${state.importTarget==="aug"?"2026-08":"2026-09"}', ${state.importTarget==="aug"?"AUG_2026_IMPORT":"SEPT_2026_IMPORT"});state.importTarget=null;">⭱ 確定匯入</button>
-        <button class="btn-secondary" onclick="state.importTarget=null;render();">取消</button>
+        <button class="btn-primary" onclick="performImport('${sel==="aug"?"2026-08":"2026-09"}', ${sel==="aug"?"AUG_2026_IMPORT":"SEPT_2026_IMPORT"});state.showImportPicker=false;">⭱ 確定匯入</button>
+        <button class="btn-secondary" onclick="state.showImportPicker=false;render();">取消</button>
       </div>
     </div></div>`;
   }
