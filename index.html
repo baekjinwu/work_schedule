@@ -12,6 +12,7 @@
     --b:#2F8F82; --b-soft:#DEF1EE;
     --c:#4A5AA8; --c-soft:#E3E6F6;
     --pt:#A8447A; --pt-soft:#F5E1EC;
+    --uia:#7C5CBF; --uia-soft:#EDE7F8;
     --off:#8A8578; --off-soft:#EEECE6;
     --red:#C0392B; --red-soft:#FBE3E1;
   }
@@ -26,7 +27,7 @@
   .pillbtn{border-radius:999px;border:none;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,.08);cursor:pointer;padding:8px 14px;font-size:13px;}
   .darkbtn{background:var(--ink);color:#fff;}
   .summary{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:20px;}
-  @media(min-width:640px){.summary{grid-template-columns:repeat(7,1fr);}}
+  @media(min-width:640px){.summary{grid-template-columns:repeat(8,1fr);}}
   .card{background:#fff;border-radius:10px;padding:12px;box-shadow:0 1px 2px rgba(0,0,0,.05);}
   .card .lbl{font-size:11px;color:var(--muted);margin-bottom:4px;}
   .card .val{font-size:18px;font-weight:600;}
@@ -89,16 +90,18 @@
 <script>
 /* ---------- 常數設定 ---------- */
 const DEFAULT_TIMES = {
-  A: { start: "08:30", end: "12:30" },
-  B: { start: "13:00", end: "17:00" },
-  C: { start: "17:30", end: "21:30" },
-  PT: { start: "18:00", end: "21:00" },
+  A: { start: "08:30", end: "12:30", breakMinutes: 0 },
+  B: { start: "13:00", end: "17:00", breakMinutes: 0 },
+  C: { start: "17:30", end: "21:30", breakMinutes: 0 },
+  PT: { start: "18:00", end: "21:00", breakMinutes: 0 },
+  UIA: { start: "13:30", end: "22:30", breakMinutes: 60 },
 };
 const SHIFT_META = {
   A: { label: "早診", color: "var(--a)", soft: "var(--a-soft)" },
   B: { label: "午診", color: "var(--b)", soft: "var(--b-soft)" },
   C: { label: "晚診", color: "var(--c)", soft: "var(--c-soft)" },
   PT: { label: "兼職・好幸福泌尿科", color: "var(--pt)", soft: "var(--pt-soft)" },
+  UIA: { label: "兼職・IACC", color: "var(--uia)", soft: "var(--uia-soft)" },
   OFF: { label: "休假", color: "var(--off)", soft: "var(--off-soft)" },
 };
 const WEEKDAYS = ["日","一","二","三","四","五","六"];
@@ -167,7 +170,7 @@ function monthKeyOf(y,m){return `${y}-${pad2(m+1)}`;}
 function dateKeyOf(y,m,d){return `${monthKeyOf(y,m)}-${pad2(d)}`;}
 function processRoom(raw){const r=(raw||"").trim();if(r.length===3&&r[0]==="2")return r.slice(1);return r;}
 function timeToMinutes(t){const [h,m]=t.split(":").map(Number);return h*60+m;}
-function durationHours(times,type){const c=times[type];if(!c)return 0;return (timeToMinutes(c.end)-timeToMinutes(c.start))/60;}
+function durationHours(times,type){const c=times[type];if(!c)return 0;const mins=(timeToMinutes(c.end)-timeToMinutes(c.start)-(c.breakMinutes||0));return Math.max(mins,0)/60;}
 function formatHours(h){return Number.isInteger(h)?String(h):h.toFixed(1);}
 function getMonthWeeks(y,m){
   const first=new Date(y,m,1).getDay();
@@ -211,7 +214,12 @@ let state = {
 
 function loadShiftTimes(){
   const saved = lsGet(LS_PREFIX + "settings:shiftTimes");
-  state.shiftTimes = saved ? Object.assign({}, DEFAULT_TIMES, saved) : DEFAULT_TIMES;
+  if(!saved){ state.shiftTimes = DEFAULT_TIMES; return; }
+  const merged = {};
+  Object.keys(DEFAULT_TIMES).forEach(k=>{
+    merged[k] = Object.assign({}, DEFAULT_TIMES[k], saved[k] || {});
+  });
+  state.shiftTimes = merged;
 }
 function loadMonth(){
   const key = monthKeyOf(state.year, state.monthIndex);
@@ -228,7 +236,7 @@ function persistMonth(updated){
 
 /* ---------- 計算 ---------- */
 function computeTotals(){
-  const t = {A:{count:0,hours:0},B:{count:0,hours:0},C:{count:0,hours:0},PT:{count:0,hours:0}};
+  const t = {A:{count:0,hours:0},B:{count:0,hours:0},C:{count:0,hours:0},PT:{count:0,hours:0},UIA:{count:0,hours:0}};
   Object.values(state.scheduleData).forEach(list=>{
     (list||[]).forEach(e=>{
       if(!t[e.type])return;
@@ -245,7 +253,7 @@ function computeOffDays(){
   for(let d=1; d<=days; d++){
     const key = dateKeyOf(state.year, state.monthIndex, d);
     const entries = state.scheduleData[key] || [];
-    const hasWork = entries.some(e=>["A","B","C","PT"].includes(e.type));
+    const hasWork = entries.some(e=>["A","B","C","PT","UIA"].includes(e.type));
     if(!hasWork)n++;
   }
   return n;
@@ -259,7 +267,7 @@ function buildMonthRows(){
     const key = dateKeyOf(state.year, state.monthIndex, d);
     const entries = state.scheduleData[key] || [];
     const holiday = HOLIDAYS_2026[key];
-    const work = entries.filter(e=>["A","B","C","PT"].includes(e.type));
+    const work = entries.filter(e=>["A","B","C","PT","UIA"].includes(e.type));
     let codes = work.map(e=> e.doctor ? `${e.code}(${e.doctor})` : e.code).join("+");
     if(!codes) codes = holiday ? `休診・${holiday}` : "OFF";
     const hours = work.reduce((s,e)=>s+durationHours(state.shiftTimes,e.type),0);
@@ -274,7 +282,7 @@ function handleCopyText(){
   let text = `輔大醫院門診 個人排班 - ${state.year}年${state.monthIndex+1}月\n\n`;
   rows.forEach(r=>{ text += `${r.date}(${r.weekday})  ${r.codes}${r.hours? "  "+formatHours(r.hours)+"hr":""}\n`; });
   text += `\n本月總工時：${formatHours(totals.totalHours)} 小時\n`;
-  text += `早診A ${totals.A.count}診 ${formatHours(totals.A.hours)}hr／午診B ${totals.B.count}診 ${formatHours(totals.B.hours)}hr／晚診C ${totals.C.count}診 ${formatHours(totals.C.hours)}hr／兼職PT ${totals.PT.count}次 ${formatHours(totals.PT.hours)}hr`;
+  text += `早診A ${totals.A.count}診 ${formatHours(totals.A.hours)}hr／午診B ${totals.B.count}診 ${formatHours(totals.B.hours)}hr／晚診C ${totals.C.count}診 ${formatHours(totals.C.hours)}hr／兼職PT ${totals.PT.count}次 ${formatHours(totals.PT.hours)}hr／兼職UIA ${totals.UIA.count}次 ${formatHours(totals.UIA.hours)}hr`;
   navigator.clipboard.writeText(text).then(()=>{
     state.copyMsg = "已複製本月班表文字"; render();
     setTimeout(()=>{state.copyMsg="";render();},2500);
@@ -293,6 +301,7 @@ function handleDownloadCSV(){
   csv += `午診B,${totals.B.count}診,,${formatHours(totals.B.hours)}\n`;
   csv += `晚診C,${totals.C.count}診,,${formatHours(totals.C.hours)}\n`;
   csv += `兼職PT,${totals.PT.count}次,,${formatHours(totals.PT.hours)}\n`;
+  csv += `兼職UIA,${totals.UIA.count}次,,${formatHours(totals.UIA.hours)}\n`;
   downloadBlob(new Blob(["\uFEFF"+csv],{type:"text/csv;charset=utf-8;"}), `排班表_${monthKeyOf(state.year,state.monthIndex)}.csv`);
 }
 function downloadBlob(blob, filename){
@@ -339,7 +348,7 @@ function performImport(targetMonthKey, dataset){
   const merged = Object.assign({}, base);
   Object.entries(dataset).forEach(([date,entries])=>{
     const existing = merged[date] || [];
-    const keep = existing.filter(e=>e.type==="PT"||e.type==="OFF");
+    const keep = existing.filter(e=>e.type==="PT"||e.type==="UIA"||e.type==="OFF");
     merged[date] = entries.concat(keep);
   });
   lsSet(LS_PREFIX+"schedule:"+targetMonthKey, merged);
@@ -388,24 +397,24 @@ function startEdit(idx, entry){
 }
 function onRoomInput(v){
   state.roomInput = v;
-  if(state.addingType && state.addingType!=="PT" && state.addingType!=="OFF"){
+  if(state.addingType && state.addingType!=="PT" && state.addingType!=="UIA" && state.addingType!=="OFF"){
     state.codeInput = state.addingType + processRoom(v);
     const codeEl = document.getElementById("codeInputEl");
     if(codeEl) codeEl.value = state.codeInput;
   }
   const saveBtn = document.getElementById("saveEntryBtn");
   if(saveBtn){
-    const disabled = (state.addingType!=="PT" && state.addingType!=="OFF" && !v.trim());
+    const disabled = (state.addingType!=="PT" && state.addingType!=="UIA" && state.addingType!=="OFF" && !v.trim());
     saveBtn.disabled = disabled;
   }
 }
 function confirmAdd(){
   if(!state.selectedDay || !state.addingType) return;
-  if(state.addingType!=="PT" && state.addingType!=="OFF" && !state.roomInput.trim()) return;
+  if(state.addingType!=="PT" && state.addingType!=="UIA" && state.addingType!=="OFF" && !state.roomInput.trim()) return;
   const dateStr = dateKeyOf(state.year, state.monthIndex, state.selectedDay);
   const entry = {
     type: state.addingType,
-    room: (state.addingType==="PT"||state.addingType==="OFF") ? "" : state.roomInput.trim(),
+    room: (state.addingType==="PT"||state.addingType==="UIA"||state.addingType==="OFF") ? "" : state.roomInput.trim(),
     code: state.codeInput.trim() || state.addingType,
     doctor: state.doctorInput.trim(),
   };
@@ -433,6 +442,13 @@ function saveSettings(){
   state.showSettings=false; render();
 }
 function setDraftTime(type, field, val){ state.draftTimes[type][field]=val; render(); }
+function setDraftBreak(type, val){
+  const n = Math.max(0, Number(val)||0);
+  state.draftTimes[type].breakMinutes = n;
+  const dur = durationHours(state.draftTimes, type);
+  const el = document.getElementById("durLabel_"+type);
+  if(el) el.textContent = `實際工時 ${formatHours(dur)} hr`;
+}
 
 /* ---------- Render ---------- */
 function esc(s){ return (s===undefined||s===null) ? "" : String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/"/g,"&quot;"); }
@@ -457,12 +473,12 @@ function render(){
   </div>`;
 
   html += `<div class="summary">`;
-  ["A","B","C","PT"].forEach(type=>{
+  ["A","B","C","PT","UIA"].forEach(type=>{
     const m = SHIFT_META[type];
     html += `<div class="card" style="border-top:3px solid ${m.color}">
       <div class="lbl">${m.label}</div>
       <div class="val" style="color:${m.color}">${formatHours(totals[type].hours)}<span style="font-size:11px;font-weight:400;margin-left:4px;">hr</span></div>
-      <div class="sub">${totals[type].count} 診</div>
+      <div class="sub">${totals[type].count} 次</div>
     </div>`;
   });
   html += `<div class="card" style="border-top:3px solid var(--red)">
@@ -471,11 +487,12 @@ function render(){
     <div class="sub">含週日／假日</div>
   </div>`;
   const ftHours = totals.A.hours + totals.B.hours + totals.C.hours;
+  const ptHours = totals.PT.hours + totals.UIA.hours;
   html += `<div class="card total">
     <div class="lbl">🕐 本月總工時</div>
     <div class="row">
       <div><div class="subline">正職（A+B+C）</div><div class="amt">${formatHours(ftHours)}<span style="font-size:10px;font-weight:400;">hr</span></div></div>
-      <div><div class="subline">兼職（PT）</div><div class="amt">${formatHours(totals.PT.hours)}<span style="font-size:10px;font-weight:400;">hr</span></div></div>
+      <div><div class="subline">兼職（PT+IACC）</div><div class="amt">${formatHours(ptHours)}<span style="font-size:10px;font-weight:400;">hr</span></div></div>
     </div>
     <div class="foot">= 共 ${formatHours(totals.totalHours)} 小時</div>
   </div>`;
@@ -506,7 +523,7 @@ function render(){
       const isToday = dateStr===todayStr;
       const isSunday = new Date(state.year, state.monthIndex, day).getDay()===0;
       const holiday = HOLIDAYS_2026[dateStr];
-      const work = entries.filter(e=>["A","B","C","PT"].includes(e.type));
+      const work = entries.filter(e=>["A","B","C","PT","UIA"].includes(e.type));
       let inner = "";
       if(holiday){
         inner = `<span class="pill" style="background:var(--red-soft);color:var(--red)">休診・${esc(holiday)}</span>`;
@@ -554,7 +571,7 @@ function render(){
     }
     if(state.addingType===null){
       html += `<div class="typegrid">`;
-      ["A","B","C","PT","OFF"].forEach(type=>{
+      ["A","B","C","PT","UIA","OFF"].forEach(type=>{
         const m = SHIFT_META[type];
         const sub = state.shiftTimes[type] ? state.shiftTimes[type].start : "全天";
         html += `<button class="typebtn" onclick="startAdd('${type}')"><span class="t" style="color:${m.color}">${type}</span><span class="s">${sub}</span></button>`;
@@ -566,7 +583,7 @@ function render(){
       const timeTxt = state.shiftTimes[type] ? `（${state.shiftTimes[type].start}–${state.shiftTimes[type].end}）` : "";
       html += `<div class="formbox">
         <div style="font-size:13px;font-weight:600;margin-bottom:8px;color:${m.color}">${state.editingIndex!==null?"編輯":"新增"} ${m.label}${timeTxt}</div>`;
-      if(type!=="PT" && type!=="OFF"){
+      if(type!=="PT" && type!=="UIA" && type!=="OFF"){
         html += `<label>診間號（例如 232）</label>
           <input value="${esc(state.roomInput)}" oninput="onRoomInput(this.value)" placeholder="輸入診間號">`;
       }
@@ -576,7 +593,7 @@ function render(){
         html += `<label>當診醫師（選填，可對照門診表填入）</label>
           <input value="${esc(state.doctorInput)}" oninput="state.doctorInput=this.value" placeholder="例如：林柏辰">`;
       }
-      const disabled = (type!=="PT" && type!=="OFF" && !state.roomInput.trim()) ? "disabled" : "";
+      const disabled = (type!=="PT" && type!=="UIA" && type!=="OFF" && !state.roomInput.trim()) ? "disabled" : "";
       html += `<div class="formactions">
         <button id="saveEntryBtn" class="btn-primary" ${disabled} onclick="confirmAdd()">＋ ${state.editingIndex!==null?"更新":"儲存"}</button>
         <button class="btn-secondary" onclick="state.addingType=null;state.editingIndex=null;render();">取消</button>
@@ -596,7 +613,7 @@ function render(){
         <button class="typebtn" style="${sel==='aug'?'border-color:var(--ink);':''}" onclick="state.importMonthChoice='aug';render();"><span class="t">8 月</span><span class="s">內科組班表</span></button>
         <button class="typebtn" style="${sel==='sep'?'border-color:var(--ink);':''}" onclick="state.importMonthChoice='sep';render();"><span class="t">9 月</span><span class="s">內科組班表</span></button>
       </div>
-      <p style="font-size:13px;color:var(--muted);margin-bottom:16px;">這會匯入 ${label} 月內科組班表（吳柏辰），並覆蓋 ${label} 月已存在的門診班別（A/B/C）。兼職（PT）與 OFF 紀錄不受影響。確定要匯入嗎？</p>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:16px;">這會匯入 ${label} 月內科組班表（吳柏辰），並覆蓋 ${label} 月已存在的門診班別（A/B/C）。兼職（PT/UIA）與 OFF 紀錄不受影響。確定要匯入嗎？</p>
       <div class="formactions">
         <button class="btn-primary" onclick="performImport('${sel==="aug"?"2026-08":"2026-09"}', ${sel==="aug"?"AUG_2026_IMPORT":"SEPT_2026_IMPORT"});state.showImportPicker=false;">⭱ 確定匯入</button>
         <button class="btn-secondary" onclick="state.showImportPicker=false;render();">取消</button>
@@ -608,16 +625,24 @@ function render(){
   if(state.showSettings){
     html += `<div class="modal-bg" onclick="closeSettings()"><div class="modal" onclick="event.stopPropagation()">
       <h2>班別時間設定<button onclick="closeSettings()">✕</button></h2>`;
-    ["A","B","C","PT"].forEach(type=>{
+    ["A","B","C","PT","UIA"].forEach(type=>{
       const m = SHIFT_META[type];
-      html += `<div class="settingsrow">
-        <div class="lab" style="color:${m.color}">${type} ・ ${m.label}</div>
-        <input type="time" value="${state.draftTimes[type].start}" onchange="setDraftTime('${type}','start',this.value)">
-        <span>–</span>
-        <input type="time" value="${state.draftTimes[type].end}" onchange="setDraftTime('${type}','end',this.value)">
+      const dur = durationHours(state.draftTimes, type);
+      html += `<div style="border:1px solid var(--line);border-radius:8px;padding:8px;margin-bottom:10px;">
+        <div class="settingsrow" style="margin-bottom:6px;">
+          <div class="lab" style="color:${m.color}">${type} ・ ${m.label}</div>
+          <input type="time" value="${state.draftTimes[type].start}" onchange="setDraftTime('${type}','start',this.value)">
+          <span>–</span>
+          <input type="time" value="${state.draftTimes[type].end}" onchange="setDraftTime('${type}','end',this.value)">
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;padding-left:118px;">
+          <label style="font-size:11px;color:var(--muted);">中間休息</label>
+          <input type="number" min="0" step="5" value="${state.draftTimes[type].breakMinutes||0}" oninput="setDraftBreak('${type}',this.value)" style="width:56px;border:1px solid var(--line);border-radius:6px;padding:2px 6px;font-size:12px;">
+          <span style="font-size:11px;color:var(--muted);">分鐘・<span id="durLabel_${type}">實際工時 ${formatHours(dur)} hr</span></span>
+        </div>
       </div>`;
     });
-    html += `<p class="note">好幸福泌尿科兼職時段目前為暫定，之後確定後可在此調整，工時會自動重新計算。</p>
+    html += `<p class="note">好幸福泌尿科、IACC 兩個兼職的時段如有調整，都可以在此更新；有無薪休息時間的班別（例如 IACC 中間休息 1 小時），可以在「中間休息」填分鐘數，工時會自動扣除後重新計算。</p>
       <button class="btn-primary" style="margin-top:12px;width:100%;" onclick="saveSettings()">儲存設定</button>
     </div></div>`;
   }
