@@ -268,8 +268,12 @@ function buildMonthRows(){
     const entries = state.scheduleData[key] || [];
     const holiday = HOLIDAYS_2026[key];
     const work = entries.filter(e=>["A","B","C","PT","UIA"].includes(e.type));
-    let codes = work.map(e=> e.doctor ? `${e.code}(${e.doctor})` : e.code).join("+");
-    if(!codes) codes = holiday ? `休診・${holiday}` : "OFF";
+    const workCodes = work.map(e=> e.doctor ? `${e.code}(${e.doctor})` : e.code).join("+");
+    let codes;
+    if(holiday && workCodes) codes = `休診・${holiday}／${workCodes}`;
+    else if(holiday) codes = `休診・${holiday}`;
+    else if(workCodes) codes = workCodes;
+    else codes = "OFF";
     const hours = work.reduce((s,e)=>s+durationHours(state.shiftTimes,e.type),0);
     const wd = WEEKDAYS[new Date(state.year, state.monthIndex, d).getDay()];
     rows.push({date:`${state.year}/${pad2(state.monthIndex+1)}/${pad2(d)}`, weekday:wd, codes, hours});
@@ -526,16 +530,17 @@ function render(){
       const work = entries.filter(e=>["A","B","C","PT","UIA"].includes(e.type));
       let inner = "";
       if(holiday){
-        inner = `<span class="pill" style="background:var(--red-soft);color:var(--red)">休診・${esc(holiday)}</span>`;
-      } else if(work.length===0){
-        const style = isSunday ? "background:var(--red-soft);color:var(--red)" : "background:var(--off-soft);color:var(--off)";
-        inner = `<span class="pill" style="${style}">OFF</span>`;
-      } else {
-        inner = work.map(e=>{
+        inner += `<span class="pill" style="background:var(--red-soft);color:var(--red)">休診・${esc(holiday)}</span>`;
+      }
+      if(work.length>0){
+        inner += work.map(e=>{
           const m = SHIFT_META[e.type];
           const title = e.doctor ? ` title="當診醫師：${esc(e.doctor)}"` : "";
           return `<span class="pill" style="background:${m.soft};color:${m.color}"${title}>${esc(e.code)}</span>`;
         }).join("");
+      } else if(!holiday){
+        const style = isSunday ? "background:var(--red-soft);color:var(--red)" : "background:var(--off-soft);color:var(--off)";
+        inner = `<span class="pill" style="${style}">OFF</span>`;
       }
       html += `<button class="daycell" onclick="openDay(${day})">
         <span class="daynum ${isToday?"today":""}">${day}</span>
