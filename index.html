@@ -594,7 +594,7 @@ function render(){
       }
       html += `<label>顯示代碼（可手動修改）</label>
         <input id="codeInputEl" value="${esc(state.codeInput)}" oninput="state.codeInput=this.value">`;
-      if(type!=="OFF"){
+      if(type!=="PT" && type!=="UIA" && type!=="OFF"){
         html += `<label>當診醫師（選填，可對照門診表填入）</label>
           <input value="${esc(state.doctorInput)}" oninput="state.doctorInput=this.value" placeholder="例如：林柏辰">`;
       }
