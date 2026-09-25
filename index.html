@@ -93,8 +93,15 @@ const DEFAULT_TIMES = {
   A: { start: "08:30", end: "12:30", breakMinutes: 0 },
   B: { start: "13:00", end: "17:00", breakMinutes: 0 },
   C: { start: "17:30", end: "21:30", breakMinutes: 0 },
-  PT: { start: "18:00", end: "21:00", breakMinutes: 0 },
-  UIA: { start: "13:30", end: "22:30", breakMinutes: 60 },
+  PT: { variants: {
+    morning: { label: "早診", start: "09:30", end: "12:30", breakMinutes: 0 },
+    evening: { label: "晚診", start: "18:00", end: "21:00", breakMinutes: 0 },
+  }},
+  UIA: { variants: {
+    morning: { label: "早", start: "07:30", end: "16:30", breakMinutes: 60 },
+    mid: { label: "中", start: "10:30", end: "19:30", breakMinutes: 60 },
+    night: { label: "晚", start: "13:30", end: "22:30", breakMinutes: 60 },
+  }},
 };
 const SHIFT_META = {
   A: { label: "早診", color: "var(--a)", soft: "var(--a-soft)" },
@@ -170,7 +177,18 @@ function monthKeyOf(y,m){return `${y}-${pad2(m+1)}`;}
 function dateKeyOf(y,m,d){return `${monthKeyOf(y,m)}-${pad2(d)}`;}
 function processRoom(raw){const r=(raw||"").trim();if(r.length===3&&r[0]==="2")return r.slice(1);return r;}
 function timeToMinutes(t){const [h,m]=t.split(":").map(Number);return h*60+m;}
-function durationHours(times,type){const c=times[type];if(!c)return 0;const mins=(timeToMinutes(c.end)-timeToMinutes(c.start)-(c.breakMinutes||0));return Math.max(mins,0)/60;}
+function getShiftConfig(times,type,variant){
+  const t=times[type];
+  if(!t)return null;
+  if(t.variants) return variant ? (t.variants[variant]||null) : null;
+  return t;
+}
+function durationHours(times,type,variant){
+  const cfg=getShiftConfig(times,type,variant);
+  if(!cfg)return 0;
+  const mins=(timeToMinutes(cfg.end)-timeToMinutes(cfg.start)-(cfg.breakMinutes||0));
+  return Math.max(mins,0)/60;
+}
 function formatHours(h){return Number.isInteger(h)?String(h):h.toFixed(1);}
 function getMonthWeeks(y,m){
   const first=new Date(y,m,1).getDay();
@@ -203,6 +221,12 @@ let state = {
   roomInput: "",
   codeInput: "",
   doctorInput: "",
+  variantInput: null,
+  otEnabled: false,
+  otReason: "noMeal",
+  otActual: "",
+  otNew: "",
+  otLeave: "",
   showSettings: false,
   draftTimes: DEFAULT_TIMES,
   importTarget: null,
@@ -217,7 +241,17 @@ function loadShiftTimes(){
   if(!saved){ state.shiftTimes = DEFAULT_TIMES; return; }
   const merged = {};
   Object.keys(DEFAULT_TIMES).forEach(k=>{
-    merged[k] = Object.assign({}, DEFAULT_TIMES[k], saved[k] || {});
+    const def = DEFAULT_TIMES[k];
+    const sv = saved[k];
+    if(def.variants){
+      const mergedVariants = {};
+      Object.keys(def.variants).forEach(vk=>{
+        mergedVariants[vk] = Object.assign({}, def.variants[vk], (sv && sv.variants && sv.variants[vk]) || {});
+      });
+      merged[k] = { variants: mergedVariants };
+    } else {
+      merged[k] = Object.assign({}, def, sv || {});
+    }
   });
   state.shiftTimes = merged;
 }
@@ -241,7 +275,7 @@ function computeTotals(){
     (list||[]).forEach(e=>{
       if(!t[e.type])return;
       t[e.type].count++;
-      t[e.type].hours += durationHours(state.shiftTimes, e.type);
+      t[e.type].hours += durationHours(state.shiftTimes, e.type, e.variant);
     });
   });
   const totalHours = Object.values(t).reduce((s,x)=>s+x.hours,0);
@@ -258,6 +292,13 @@ function computeOffDays(){
   }
   return n;
 }
+function computeOvertimeCount(){
+  let n=0;
+  Object.values(state.scheduleData).forEach(list=>{
+    (list||[]).forEach(e=>{ if(e.overtime) n++; });
+  });
+  return n;
+}
 
 /* ---------- 匯出 ---------- */
 function buildMonthRows(){
@@ -268,13 +309,21 @@ function buildMonthRows(){
     const entries = state.scheduleData[key] || [];
     const holiday = HOLIDAYS_2026[key];
     const work = entries.filter(e=>["A","B","C","PT","UIA"].includes(e.type));
-    const workCodes = work.map(e=> e.doctor ? `${e.code}(${e.doctor})` : e.code).join("+");
+    const workCodes = work.map(e=>{
+      let s = e.doctor ? `${e.code}(${e.doctor})` : e.code;
+      if(e.overtime){
+        s += e.overtime.reason==="detail"
+          ? `[加班:實看${e.overtime.actualCount||"?"}人/初診${e.overtime.newCount||"?"}人/最後${e.overtime.lastLeave||"?"}離開]`
+          : "[加班:未用餐繼續接診]";
+      }
+      return s;
+    }).join("+");
     let codes;
     if(holiday && workCodes) codes = `休診・${holiday}／${workCodes}`;
     else if(holiday) codes = `休診・${holiday}`;
     else if(workCodes) codes = workCodes;
     else codes = "OFF";
-    const hours = work.reduce((s,e)=>s+durationHours(state.shiftTimes,e.type),0);
+    const hours = work.reduce((s,e)=>s+durationHours(state.shiftTimes,e.type,e.variant),0);
     const wd = WEEKDAYS[new Date(state.year, state.monthIndex, d).getDay()];
     rows.push({date:`${state.year}/${pad2(state.monthIndex+1)}/${pad2(d)}`, weekday:wd, codes, hours});
   }
@@ -377,28 +426,57 @@ function goToday(){
   state.year = now.getFullYear(); state.monthIndex = now.getMonth();
   loadMonth(); render();
 }
+function resetOvertimeFields(){
+  state.otEnabled=false; state.otReason="noMeal"; state.otActual=""; state.otNew=""; state.otLeave="";
+}
+function isNoRoomType(t){ return t==="PT" || t==="UIA" || t==="OFF"; }
+function isVariantType(t){ return t==="PT" || t==="UIA"; }
+function chooseVariant(type, variantKey){
+  state.variantInput = variantKey;
+  const cfg = state.shiftTimes[type] && state.shiftTimes[type].variants ? state.shiftTimes[type].variants[variantKey] : null;
+  state.codeInput = type + (cfg ? cfg.label : "");
+  render();
+}
 function openDay(day){
   if(!day)return;
   state.selectedDay = day;
   state.addingType = null; state.editingIndex=null;
-  state.roomInput=""; state.codeInput=""; state.doctorInput="";
+  state.roomInput=""; state.codeInput=""; state.doctorInput=""; state.variantInput=null;
+  resetOvertimeFields();
   render();
 }
 function closeDayModal(doRender=true){
   state.selectedDay=null; state.addingType=null; state.editingIndex=null;
-  state.roomInput=""; state.codeInput=""; state.doctorInput="";
+  state.roomInput=""; state.codeInput=""; state.doctorInput=""; state.variantInput=null;
+  resetOvertimeFields();
   if(doRender)render();
 }
 function startAdd(type){
   state.addingType=type; state.editingIndex=null;
-  state.roomInput=""; state.codeInput= type==="PT" ? "PT" : type; state.doctorInput="";
+  state.roomInput=""; state.codeInput = (type==="PT"||type==="UIA") ? "" : type; state.doctorInput=""; state.variantInput=null;
+  resetOvertimeFields();
   render();
 }
 function startEdit(idx, entry){
   state.addingType = entry.type; state.editingIndex = idx;
   state.roomInput = entry.room || ""; state.codeInput = entry.code || entry.type; state.doctorInput = entry.doctor || "";
+  state.variantInput = entry.variant || null;
+  if(entry.overtime){
+    state.otEnabled = true;
+    state.otReason = entry.overtime.reason || "noMeal";
+    state.otActual = entry.overtime.actualCount || "";
+    state.otNew = entry.overtime.newCount || "";
+    state.otLeave = entry.overtime.lastLeave || "";
+  } else {
+    resetOvertimeFields();
+  }
   render();
 }
+function setOtEnabled(checked){ state.otEnabled = checked; render(); }
+function setOtReason(r){ state.otReason = r; render(); }
+function setOtActual(v){ state.otActual = v; }
+function setOtNew(v){ state.otNew = v; }
+function setOtLeave(v){ state.otLeave = v; }
 function onRoomInput(v){
   state.roomInput = v;
   if(state.addingType && state.addingType!=="PT" && state.addingType!=="UIA" && state.addingType!=="OFF"){
@@ -415,12 +493,21 @@ function onRoomInput(v){
 function confirmAdd(){
   if(!state.selectedDay || !state.addingType) return;
   if(state.addingType!=="PT" && state.addingType!=="UIA" && state.addingType!=="OFF" && !state.roomInput.trim()) return;
+  if(isVariantType(state.addingType) && !state.variantInput) return;
   const dateStr = dateKeyOf(state.year, state.monthIndex, state.selectedDay);
+  const isRoomType = !isNoRoomType(state.addingType);
+  const overtime = (isRoomType && state.otEnabled)
+    ? (state.otReason==="detail"
+        ? { reason:"detail", actualCount: state.otActual.trim(), newCount: state.otNew.trim(), lastLeave: state.otLeave.trim() }
+        : { reason:"noMeal" })
+    : null;
   const entry = {
     type: state.addingType,
     room: (state.addingType==="PT"||state.addingType==="UIA"||state.addingType==="OFF") ? "" : state.roomInput.trim(),
     code: state.codeInput.trim() || state.addingType,
     doctor: state.doctorInput.trim(),
+    variant: isVariantType(state.addingType) ? state.variantInput : undefined,
+    overtime,
   };
   const updated = Object.assign({}, state.scheduleData);
   const list = updated[dateStr] ? updated[dateStr].slice() : [];
@@ -428,7 +515,8 @@ function confirmAdd(){
   else list.push(entry);
   updated[dateStr] = list;
   persistMonth(updated);
-  state.addingType=null; state.editingIndex=null; state.roomInput=""; state.codeInput=""; state.doctorInput="";
+  state.addingType=null; state.editingIndex=null; state.roomInput=""; state.codeInput=""; state.doctorInput=""; state.variantInput=null;
+  resetOvertimeFields();
   render();
 }
 function deleteEntry(dateStr, idx){
@@ -451,6 +539,17 @@ function setDraftBreak(type, val){
   state.draftTimes[type].breakMinutes = n;
   const dur = durationHours(state.draftTimes, type);
   const el = document.getElementById("durLabel_"+type);
+  if(el) el.textContent = `實際工時 ${formatHours(dur)} hr`;
+}
+function setDraftVariantTime(type, vk, field, val){
+  state.draftTimes[type].variants[vk][field] = val;
+  render();
+}
+function setDraftVariantBreak(type, vk, val){
+  const n = Math.max(0, Number(val)||0);
+  state.draftTimes[type].variants[vk].breakMinutes = n;
+  const dur = durationHours(state.draftTimes, type, vk);
+  const el = document.getElementById("durLabel_"+type+"_"+vk);
   if(el) el.textContent = `實際工時 ${formatHours(dur)} hr`;
 }
 
@@ -516,6 +615,10 @@ function render(){
   </div>`;
 
   if(state.error){ html += `<div class="errbox">${esc(state.error)}</div>`; }
+  const otCount = computeOvertimeCount();
+  if(otCount>0){
+    html += `<div style="margin-bottom:12px;font-size:13px;padding:8px 12px;border-radius:10px;background:#FFF3D6;color:#B45309;display:flex;align-items:center;gap:8px;">⚠️ 本月有 ${otCount} 筆加班紀錄，記得提出加班申請！</div>`;
+  }
 
   html += `<div class="cal"><div class="wd">${WEEKDAYS.map(w=>`<div>${w}</div>`).join("")}</div>`;
   weeks.forEach(week=>{
@@ -535,8 +638,17 @@ function render(){
       if(work.length>0){
         inner += work.map(e=>{
           const m = SHIFT_META[e.type];
-          const title = e.doctor ? ` title="當診醫師：${esc(e.doctor)}"` : "";
-          return `<span class="pill" style="background:${m.soft};color:${m.color}"${title}>${esc(e.code)}</span>`;
+          let title = "";
+          if(e.overtime){
+            const otTxt = e.overtime.reason==="detail"
+              ? `實看${e.overtime.actualCount||"?"}人／初診${e.overtime.newCount||"?"}人／最後${e.overtime.lastLeave||"?"}離開`
+              : "未用餐繼續接診";
+            title = ` title="⚠️ 有加班：${esc(otTxt)}${e.doctor?` ・ 當診醫師：${esc(e.doctor)}`:""}"`;
+          } else if(e.doctor){
+            title = ` title="當診醫師：${esc(e.doctor)}"`;
+          }
+          const warn = e.overtime ? "⚠️ " : "";
+          return `<span class="pill" style="background:${m.soft};color:${m.color}"${title}>${warn}${esc(e.code)}</span>`;
         }).join("");
       } else if(!holiday){
         const style = isSunday ? "background:var(--red-soft);color:var(--red)" : "background:var(--off-soft);color:var(--off)";
@@ -560,12 +672,18 @@ function render(){
     if(entries.length>0){
       entries.forEach((e,idx)=>{
         const m = SHIFT_META[e.type];
-        const timeTxt = state.shiftTimes[e.type] ? ` ・ ${state.shiftTimes[e.type].start}–${state.shiftTimes[e.type].end}` : "";
+        const eCfg = getShiftConfig(state.shiftTimes, e.type, e.variant);
+        const timeTxt = eCfg ? ` ・ ${eCfg.start}–${eCfg.end}` : "";
         html += `<div class="entryrow" style="background:${m.soft}">
           <div>
             <div class="code" style="color:${m.color}">${esc(e.code)}</div>
             <div class="sub">${m.label}${timeTxt}</div>
             ${e.doctor?`<div class="doc" style="color:${m.color}">當診醫師：${esc(e.doctor)}</div>`:""}
+            ${e.overtime?`<div style="display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;margin-top:4px;padding:2px 6px;border-radius:4px;background:#FFF3D6;color:#B45309;">⚠️ ${
+              e.overtime.reason==="detail"
+                ? `加班：實看${esc(e.overtime.actualCount||"?")}人／初診${esc(e.overtime.newCount||"?")}人／最後${esc(e.overtime.lastLeave||"?")}離開`
+                : "加班：未用餐繼續接診"
+            }</div>`:""}
           </div>
           <div class="acts">
             <button onclick='startEdit(${idx}, ${JSON.stringify(e).replace(/'/g,"&apos;")})'>✎</button>
@@ -578,16 +696,26 @@ function render(){
       html += `<div class="typegrid">`;
       ["A","B","C","PT","UIA","OFF"].forEach(type=>{
         const m = SHIFT_META[type];
-        const sub = state.shiftTimes[type] ? state.shiftTimes[type].start : "全天";
+        const cfg = state.shiftTimes[type];
+        const sub = cfg ? (cfg.variants ? `${Object.keys(cfg.variants).length} 時段` : cfg.start) : "全天";
         html += `<button class="typebtn" onclick="startAdd('${type}')"><span class="t" style="color:${m.color}">${type}</span><span class="s">${sub}</span></button>`;
       });
       html += `</div>`;
     } else {
       const type = state.addingType;
       const m = SHIFT_META[type];
-      const timeTxt = state.shiftTimes[type] ? `（${state.shiftTimes[type].start}–${state.shiftTimes[type].end}）` : "";
+      const typeCfg = state.shiftTimes[type];
+      const timeTxt = (typeCfg && !typeCfg.variants) ? `（${typeCfg.start}–${typeCfg.end}）` : "";
       html += `<div class="formbox">
         <div style="font-size:13px;font-weight:600;margin-bottom:8px;color:${m.color}">${state.editingIndex!==null?"編輯":"新增"} ${m.label}${timeTxt}</div>`;
+      if(isVariantType(type) && typeCfg && typeCfg.variants){
+        html += `<label>選擇時段</label><div class="typegrid" style="grid-template-columns:repeat(3,1fr);margin-bottom:12px;">`;
+        Object.entries(typeCfg.variants).forEach(([vk,v])=>{
+          const sel = state.variantInput===vk;
+          html += `<button class="typebtn" style="${sel?`border-color:${m.color};`:""}" onclick="chooseVariant('${type}','${vk}')"><span class="t" style="color:${m.color};font-size:13px;">${v.label}</span><span class="s">${v.start}–${v.end}</span></button>`;
+        });
+        html += `</div>`;
+      }
       if(type!=="PT" && type!=="UIA" && type!=="OFF"){
         html += `<label>診間號（例如 232）</label>
           <input value="${esc(state.roomInput)}" oninput="onRoomInput(this.value)" placeholder="輸入診間號">`;
@@ -598,7 +726,28 @@ function render(){
         html += `<label>當診醫師（選填，可對照門診表填入）</label>
           <input value="${esc(state.doctorInput)}" oninput="state.doctorInput=this.value" placeholder="例如：林柏辰">`;
       }
-      const disabled = (type!=="PT" && type!=="UIA" && type!=="OFF" && !state.roomInput.trim()) ? "disabled" : "";
+      if(type!=="PT" && type!=="UIA" && type!=="OFF"){
+        html += `<div style="border:1px solid #F3D9A6;background:#FFF8EC;border-radius:8px;padding:10px;margin-bottom:12px;">
+          <label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:#B45309;cursor:pointer;margin-bottom:0;">
+            <input type="checkbox" ${state.otEnabled?"checked":""} onchange="setOtEnabled(this.checked)" style="width:auto;margin:0;">
+            ⚠️ 有加班，記得申報
+          </label>`;
+        if(state.otEnabled){
+          html += `<div style="margin-top:8px;display:flex;flex-direction:column;gap:6px;font-size:12px;color:#8A6A2B;">
+            <label style="display:flex;align-items:center;gap:6px;"><input type="radio" name="otReason" ${state.otReason==="noMeal"?"checked":""} onchange="setOtReason('noMeal')" style="width:auto;margin:0;"> 未用餐繼續接診</label>
+            <label style="display:flex;align-items:center;gap:6px;"><input type="radio" name="otReason" ${state.otReason==="detail"?"checked":""} onchange="setOtReason('detail')" style="width:auto;margin:0;"> 填寫看診人數與離開時間</label>
+          </div>`;
+          if(state.otReason==="detail"){
+            html += `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px;">
+              <div><label style="font-size:10px;color:var(--muted);">實看人數</label><input type="number" min="0" value="${esc(state.otActual)}" oninput="setOtActual(this.value)" style="font-size:12px;padding:5px 6px;margin-bottom:0;"></div>
+              <div><label style="font-size:10px;color:var(--muted);">初診人數</label><input type="number" min="0" value="${esc(state.otNew)}" oninput="setOtNew(this.value)" style="font-size:12px;padding:5px 6px;margin-bottom:0;"></div>
+              <div><label style="font-size:10px;color:var(--muted);">最後離開</label><input type="time" value="${esc(state.otLeave)}" oninput="setOtLeave(this.value)" style="font-size:12px;padding:5px 6px;margin-bottom:0;"></div>
+            </div>`;
+          }
+        }
+        html += `</div>`;
+      }
+      const disabled = ((type!=="PT" && type!=="UIA" && type!=="OFF" && !state.roomInput.trim()) || (isVariantType(type) && !state.variantInput)) ? "disabled" : "";
       html += `<div class="formactions">
         <button id="saveEntryBtn" class="btn-primary" ${disabled} onclick="confirmAdd()">＋ ${state.editingIndex!==null?"更新":"儲存"}</button>
         <button class="btn-secondary" onclick="state.addingType=null;state.editingIndex=null;render();">取消</button>
@@ -632,6 +781,29 @@ function render(){
       <h2>班別時間設定<button onclick="closeSettings()">✕</button></h2>`;
     ["A","B","C","PT","UIA"].forEach(type=>{
       const m = SHIFT_META[type];
+      const cfg = state.draftTimes[type];
+      if(cfg && cfg.variants){
+        html += `<div style="border:1px solid var(--line);border-radius:8px;padding:8px;margin-bottom:10px;">
+          <div style="font-size:12px;font-weight:600;color:${m.color};margin-bottom:8px;">${type} ・ ${m.label}</div>`;
+        Object.entries(cfg.variants).forEach(([vk,v])=>{
+          const dur = durationHours(state.draftTimes, type, vk);
+          html += `<div style="border:1px solid #F3F1EB;border-radius:6px;padding:8px;margin-bottom:8px;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+              <div style="width:56px;font-size:11px;font-weight:500;color:${m.color};">${v.label}</div>
+              <input type="time" value="${v.start}" onchange="setDraftVariantTime('${type}','${vk}','start',this.value)" style="flex:1;border:1px solid var(--line);border-radius:6px;padding:4px 6px;font-size:12px;">
+              <span>–</span>
+              <input type="time" value="${v.end}" onchange="setDraftVariantTime('${type}','${vk}','end',this.value)" style="flex:1;border:1px solid var(--line);border-radius:6px;padding:4px 6px;font-size:12px;">
+            </div>
+            <div style="display:flex;align-items:center;gap:8px;padding-left:64px;">
+              <label style="font-size:10px;color:var(--muted);">中間休息</label>
+              <input type="number" min="0" step="5" value="${v.breakMinutes||0}" oninput="setDraftVariantBreak('${type}','${vk}',this.value)" style="width:48px;border:1px solid var(--line);border-radius:6px;padding:2px 5px;font-size:11px;">
+              <span style="font-size:10px;color:var(--muted);">分鐘・<span id="durLabel_${type}_${vk}">實際工時 ${formatHours(dur)} hr</span></span>
+            </div>
+          </div>`;
+        });
+        html += `</div>`;
+        return;
+      }
       const dur = durationHours(state.draftTimes, type);
       html += `<div style="border:1px solid var(--line);border-radius:8px;padding:8px;margin-bottom:10px;">
         <div class="settingsrow" style="margin-bottom:6px;">
@@ -647,7 +819,7 @@ function render(){
         </div>
       </div>`;
     });
-    html += `<p class="note">好幸福泌尿科、IACC 兩個兼職的時段如有調整，都可以在此更新；有無薪休息時間的班別（例如 IACC 中間休息 1 小時），可以在「中間休息」填分鐘數，工時會自動扣除後重新計算。</p>
+    html += `<p class="note">好幸福泌尿科、IACC 兩個兼職都是自選時段：每個時段各自的起訖與中間休息都能在這裡調整，工時會自動重新計算。</p>
       <button class="btn-primary" style="margin-top:12px;width:100%;" onclick="saveSettings()">儲存設定</button>
     </div></div>`;
   }
