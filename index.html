@@ -171,6 +171,41 @@ const SEPT_2026_IMPORT = {
   "2026-09-30":[{type:"A",room:"306",code:"A306"},{type:"B",room:"29",code:"B29"}],
 };
 
+// 內科組 115年10月班表 — 吳柏辰 (員編 B05548)
+// 10/19「外」= 支援(無指定診間)；10/26「補」= 補休，視為 OFF 未匯入；10/30「AB205」=A/B合併班待確認，暫以原樣呈現
+const OCT_2026_IMPORT = {
+  "2026-10-01":[{type:"A",room:"306",code:"A306"},{type:"C",room:"21",code:"C21"}],
+  "2026-10-02":[{type:"A",room:"65",code:"A65"},{type:"B",room:"35",code:"B35"},{type:"C",room:"31",code:"C31"}],
+  "2026-10-03":[{type:"A",room:"66",code:"A66"}],
+  "2026-10-05":[{type:"A",room:"31",code:"A31"},{type:"B",room:"29",code:"B29"}],
+  "2026-10-06":[{type:"A",room:"66",code:"A66"},{type:"B",room:"19",code:"B19"}],
+  "2026-10-07":[{type:"A",room:"33",code:"A33"},{type:"B",room:"30",code:"B30"},{type:"C",room:"55",code:"C55"}],
+  "2026-10-08":[{type:"A",room:"306",code:"A306"},{type:"B",room:"55",code:"B55"}],
+  "2026-10-09":[{type:"A",room:"65",code:"A65"},{type:"B",room:"19",code:"B19"}],
+  "2026-10-12":[{type:"B",room:"205A",code:"B205A"},{type:"C",room:"29",code:"C29"}],
+  "2026-10-13":[{type:"B",room:"18",code:"B*18"},{type:"C",room:"31",code:"C31"}],
+  "2026-10-14":[{type:"B",room:"24",code:"B24"},{type:"C",room:"31",code:"C31"}],
+  "2026-10-15":[{type:"A",room:"306",code:"A306"},{type:"C",room:"21",code:"C21"}],
+  "2026-10-16":[{type:"A",room:"66",code:"A66"},{type:"B",room:"18",code:"B*18"},{type:"C",room:"25",code:"C25"}],
+  "2026-10-17":[{type:"A",room:"15",code:"A15"}],
+  "2026-10-19":[{type:"A",room:"23",code:"A23"},{type:"B",room:"",code:"B外"}],
+  "2026-10-20":[{type:"A",room:"49",code:"A49"},{type:"B",room:"18",code:"B18"}],
+  "2026-10-22":[{type:"A",room:"306",code:"A306"}],
+  "2026-10-23":[{type:"A",room:"66",code:"A66"}],
+  "2026-10-26":[{type:"A",room:"24",code:"A24"},{type:"C",room:"30",code:"C30"}],
+  "2026-10-27":[{type:"A",room:"24",code:"A24"},{type:"B",room:"65",code:"B65"}],
+  "2026-10-28":[{type:"A",room:"306",code:"A306"},{type:"B",room:"31",code:"B31"},{type:"C",room:"21",code:"C21"}],
+  "2026-10-29":[{type:"A",room:"306",code:"A306"},{type:"B",room:"20",code:"B20"},{type:"C",room:"29",code:"C29"}],
+  "2026-10-30":[{type:"A",room:"205",code:"AB205"},{type:"B",room:"19",code:"B19"},{type:"C",room:"",code:"C延"}],
+  "2026-10-31":[{type:"A",room:"23",code:"A23"}],
+};
+
+const IMPORT_MONTHS = {
+  aug: { label: "8 月", monthKey: "2026-08", dataset: AUG_2026_IMPORT },
+  sep: { label: "9 月", monthKey: "2026-09", dataset: SEPT_2026_IMPORT },
+  oct: { label: "10 月", monthKey: "2026-10", dataset: OCT_2026_IMPORT },
+};
+
 /* ---------- 小工具 ---------- */
 function pad2(n){return String(n).padStart(2,"0");}
 function monthKeyOf(y,m){return `${y}-${pad2(m+1)}`;}
@@ -759,17 +794,16 @@ function render(){
   /* 匯入班表 modal：先選月份，再確認 */
   if(state.showImportPicker){
     const sel = state.importMonthChoice || "aug";
-    const label = sel==="aug" ? "8" : "9";
+    const label = IMPORT_MONTHS[sel].label;
     html += `<div class="modal-bg" onclick="state.showImportPicker=false;render();"><div class="modal" onclick="event.stopPropagation()">
       <h2>匯入班表<button onclick="state.showImportPicker=false;render();">✕</button></h2>
       <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:6px;">選擇要匯入的月份</label>
-      <div class="typegrid" style="grid-template-columns:repeat(2,1fr);margin-bottom:16px;">
-        <button class="typebtn" style="${sel==='aug'?'border-color:var(--ink);':''}" onclick="state.importMonthChoice='aug';render();"><span class="t">8 月</span><span class="s">內科組班表</span></button>
-        <button class="typebtn" style="${sel==='sep'?'border-color:var(--ink);':''}" onclick="state.importMonthChoice='sep';render();"><span class="t">9 月</span><span class="s">內科組班表</span></button>
+      <div class="typegrid" style="grid-template-columns:repeat(3,1fr);margin-bottom:16px;">
+        ${["aug","sep","oct"].map(m=>`<button class="typebtn" style="${sel===m?'border-color:var(--ink);':''}" onclick="state.importMonthChoice='${m}';render();"><span class="t">${IMPORT_MONTHS[m].label}</span><span class="s">內科組班表</span></button>`).join("")}
       </div>
-      <p style="font-size:13px;color:var(--muted);margin-bottom:16px;">這會匯入 ${label} 月內科組班表（吳柏辰），並覆蓋 ${label} 月已存在的門診班別（A/B/C）。兼職（PT/UIA）與 OFF 紀錄不受影響。確定要匯入嗎？</p>
+      <p style="font-size:13px;color:var(--muted);margin-bottom:16px;">這會匯入 ${label} 內科組班表（吳柏辰），並覆蓋 ${label} 已存在的門診班別（A/B/C）。兼職（PT/UIA）與 OFF 紀錄不受影響。確定要匯入嗎？</p>
       <div class="formactions">
-        <button class="btn-primary" onclick="performImport('${sel==="aug"?"2026-08":"2026-09"}', ${sel==="aug"?"AUG_2026_IMPORT":"SEPT_2026_IMPORT"});state.showImportPicker=false;">⭱ 確定匯入</button>
+        <button class="btn-primary" onclick="performImport('${IMPORT_MONTHS[sel].monthKey}', ${sel==="aug"?"AUG_2026_IMPORT":sel==="sep"?"SEPT_2026_IMPORT":"OCT_2026_IMPORT"});state.showImportPicker=false;">⭱ 確定匯入</button>
         <button class="btn-secondary" onclick="state.showImportPicker=false;render();">取消</button>
       </div>
     </div></div>`;
